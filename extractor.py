@@ -6,18 +6,17 @@ __license__ = "MIT"
 import os
 import requests
 import json
-import ramda
 import shutil
 import re
 import concurrent.futures
 import time
 import argparse
 
+SAVED = 0
+API_URI = 'https://api.figma.com/v1/'
 
-API_URI = "https://api.figma.com/v1/"
-
-PATTERN_SIZE = re.compile("=[0-9]{2}")
-PATTERN_THEME = re.compile("=(Filled|Regular)")
+PATTERN_SIZE = re.compile('=[0-9]{2}')
+PATTERN_THEME = re.compile('=(Filled|Regular)')
 
 
 
@@ -42,30 +41,31 @@ class FigmaImages:
 
 
 def request_figma_api(token, endpoint):
-    headers = {"X-Figma-Token": "{0}".format(token), "Content-Type": "application/json"}
+    headers = {'X-Figma-Token': '{0}'.format(token), 'Content-Type': 'application/json'}
     try:
-        response = requests.get("{0}{1}".format(API_URI, endpoint), headers=headers)
+        response = requests.get('{0}{1}'.format(API_URI, endpoint), headers=headers)
         
         if response.status_code == 200:
             return json.loads(response.text)
         else:
             return None
     except (Exception, requests.HTTPError, requests.exceptions.SSLError) as exception:
-        print("Error occurred attpempting to make an api request. {0}".format(exception))
+        print('Error occurred attpempting to make an api request. {0}'.format(exception))
         return None
 
 
 def create_directories(sizes, out_dir):
-    filled_path = os.path.join(out_dir, "filled")
-    regular_path = os.path.join(out_dir, "regular")
+    filled_path = os.path.join(out_dir, 'filled')
+    regular_path = os.path.join(out_dir, 'regular')
     print("Creating directories")
 
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
-    if not os.path.exists(os.path.join(out_dir, "filled")):
-        os.mkdir(os.path.join(out_dir, "filled"))
-    if not os.path.exists(os.path.join(out_dir, "regular")):
-        os.mkdir(os.path.join(out_dir, "regular"))
+    if not os.path.exists(os.path.join(out_dir, 'filed')):
+        os.mkdir(os.path.join(out_dir, 'filled'))
+    
+    if not os.path.exists(os.path.join(out_dir, 'regular')):
+        os.mkdir(os.path.join(out_dir, 'regular'))
 
     for folder in sizes:
         if not os.path.exists(os.path.join(filled_path, folder)):
@@ -75,25 +75,25 @@ def create_directories(sizes, out_dir):
 
 
 def get_figma_files(token, file_key):
-    data = request_figma_api(token, "files/{0}".format(file_key))
+    data = request_figma_api(token, 'files/{0}'.format(file_key))
     if data is not None:
         return FigmaFile(
-            data["name"],
-            data["document"],
-            data["components"],
-            data["lastModified"],
-            data["thumbnailUrl"],
-            data["schemaVersion"],
-            data["styles"],
+            data['name'],
+            data['document'],
+            data['components'],
+            data['lastModified'],
+            data['thumbnailUrl'],
+            data['schemaVersion'],
+            data['styles'],
         )
 
 
 def get_figma_images(token, file_key, ids):
-    time.sleep(5)
-    data = request_figma_api(token, "images/{0}?ids={1}&format=svg".format(file_key, ids))
+    time.sleep(3)
+    data = request_figma_api(token, 'images/{0}?ids={1}&format=svg'.format(file_key, ids))
 
     if data is not None:
-        return FigmaImages(data["images"], data["err"])
+        return FigmaImages(data['images'], data['err'])
 
 
 
@@ -105,18 +105,19 @@ def divide_chunks(l, n):
 
 
 def get_and_save_image(chunk):
-    image_dict = get_figma_images(TOKEN, FILE_KEY, ",".join(chunk)).images
+    global SAVED
+    image_dict = get_figma_images(TOKEN, FILE_KEY, ','.join(chunk)).images
     for key in chunk:
         
-    
-        theme = PATTERN_THEME.findall(ramda.prop("name")(files.components[key]))[0].lower()
+        
+        theme = PATTERN_THEME.findall(files.components[key].get('name'))[0].lower()
 
-        size = PATTERN_SIZE.findall(ramda.prop("name")(files.components[key]))[0].replace('=', '')
+        size = PATTERN_SIZE.findall(files.components[key].get('name'))[0].replace('=', '')
         dir_out = os.path.join(OUT_DIR, '{0}/{1}'.format(theme, size))
    
-        name = "{0}.svg".format(ramda.prop("key")(files.components[key]))
+        name = '{0}.svg'.format(files.components[key].get('key'))
         file_out = os.path.join(dir_out, name)
-        time.sleep(5)
+        time.sleep(3)
         response = requests.get(image_dict[key], stream=True)
 
 
@@ -124,8 +125,8 @@ def get_and_save_image(chunk):
             response.raw.decode_content = True
             with open(file_out, 'wb') as file:
                 shutil.copyfileobj(response.raw, file)
-                print('Saving image {0} with size {1} and theme {2}'.format(name, size, theme))
-         
+                print(f'Saving image {name} with size {size} and theme {theme}')
+                SAVED += 1
 
 
 def main(args):
@@ -134,6 +135,7 @@ def main(args):
     global OUT_DIR
     global files
     global component_ids
+
     TOKEN = args.token
     FILE_KEY = args.key
     OUT_DIR = args.out
@@ -149,8 +151,8 @@ def main(args):
         component_ids.append(key)
 
 
-        if re.findall(r'=[0-9]{2}', ramda.prop('name')(files.components[key])):
-            component_size = PATTERN_SIZE.findall(ramda.prop('name')(files.components[key]))[0].replace('=', '')
+        if re.findall(r'=[0-9]{2}', files.components[key].get('name')):
+            component_size = PATTERN_SIZE.findall(files.components[key].get('name'))[0].replace('=', '')
         else:
             continue
         size_map.append(component_size)
@@ -168,21 +170,9 @@ def main(args):
         
     secondTimer = time.perf_counter()
 
-    print(f"Finished in {secondTimer-firstTimer} seconds")
-    
+    print(f'Finished in {secondTimer-firstTimer} seconds')
+    print(f'saved {SAVED} images')
 
-    FOLDER = 'C:/Users/Lucas/Documents/GitHub/fluenticons-extractor/icons'
-    totalFiles = 0
-    totalDir = 0
-    for base, dirs, files in os.walk(FOLDER):
-        print('Searching in : ',base)
-        for directories in dirs:
-            totalDir += 1
-        for Files in files:
-            totalFiles += 1
-    print('Total number of files',totalFiles)
-    print('Total Number of directories',totalDir)
-    print('Total:',(totalDir + totalFiles))
 
 
 if __name__ == "__main__":
